@@ -6,7 +6,8 @@ const sigmoid=z=>z>=0?1/(1+Math.exp(-z)):Math.exp(z)/(1+Math.exp(z));
 const mse=(w,b,data=LINEAR_DATA)=>data.reduce((s,d)=>s+(w*d.x+b-d.y)**2,0)/data.length;
 function ols(data=LINEAR_DATA){const n=data.length,x=data.reduce((s,d)=>s+d.x,0)/n,y=data.reduce((s,d)=>s+d.y,0)/n;const w=data.reduce((s,d)=>s+(d.x-x)*(d.y-y),0)/data.reduce((s,d)=>s+(d.x-x)**2,0);return {w,b:y-w*x};}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function chart(id,opt={}){const svg=$(id),W=680,H=370,L=64,R=22,T=24,B=56;const {xmin=0,xmax=11,ymin=0,ymax=110,xlabel='学习时长 / 小时',ylabel='考试分数 / 分',xticks=[0,2,4,6,8,10],yticks=[0,20,40,60,80,100]}=opt;const x=v=>L+(v-xmin)/(xmax-xmin)*(W-L-R),y=v=>H-B-(v-ymin)/(ymax-ymin)*(H-T-B);let s=`<defs><clipPath id="clip-${id}"><rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}"/></clipPath></defs>`;for(const t of yticks)s+=`<line x1="${L}" y1="${y(t)}" x2="${W-R}" y2="${y(t)}" stroke="${C.grid}"/><text x="${L-12}" y="${y(t)+5}" text-anchor="end" font-size="13" fill="${C.muted}">${t}</text>`;for(const t of xticks)s+=`<line x1="${x(t)}" y1="${T}" x2="${x(t)}" y2="${H-B}" stroke="${C.grid}"/><text x="${x(t)}" y="${H-B+24}" text-anchor="middle" font-size="13" fill="${C.muted}">${t}</text>`;s+=`<text x="${L}" y="15" font-size="13" fill="${C.muted}">${esc(ylabel)}</text><text x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle" font-size="13" fill="${C.muted}">${esc(xlabel)}</text>`;return {svg,x,y,base:s,finish:body=>svg.innerHTML=s+`<g clip-path="url(#clip-${id})">${body}</g>`,xmin,xmax,ymin,ymax};}
+function ensureSvg(id){let svg=$(id);if(svg)return svg;const host=$('anscombeGrid')||document.getElementById('main');svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id=id;svg.setAttribute('class','plot');svg.setAttribute('viewBox','0 0 680 370');svg.setAttribute('role','img');if(host)host.appendChild(svg);return svg;}
+function chart(id,opt={}){const svg=ensureSvg(id),W=680,H=370,L=64,R=22,T=24,B=56;const {xmin=0,xmax=11,ymin=0,ymax=110,xlabel='学习时长 / 小时',ylabel='考试分数 / 分',xticks=[0,2,4,6,8,10],yticks=[0,20,40,60,80,100]}=opt;const x=v=>L+(v-xmin)/(xmax-xmin)*(W-L-R),y=v=>H-B-(v-ymin)/(ymax-ymin)*(H-T-B);let s='';for(const t of yticks)s+=`<line x1="${L}" y1="${y(t)}" x2="${W-R}" y2="${y(t)}" stroke="${C.grid}"/><text x="${L-12}" y="${y(t)+5}" text-anchor="end" font-size="13" fill="${C.muted}">${t}</text>`;for(const t of xticks)s+=`<line x1="${x(t)}" y1="${T}" x2="${x(t)}" y2="${H-B}" stroke="${C.grid}"/><text x="${x(t)}" y="${H-B+24}" text-anchor="middle" font-size="13" fill="${C.muted}">${t}</text>`;s+=`<text x="${L}" y="15" font-size="13" fill="${C.muted}">${esc(ylabel)}</text><text x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle" font-size="13" fill="${C.muted}">${esc(xlabel)}</text>`;return {svg,x,y,base:s,finish:body=>{svg.innerHTML=s+`<g>${body}</g>`;},xmin,xmax,ymin,ymax};}
 function pathLine(p,fn,start,end,color=C.blue,width=3){let d='';for(let i=0;i<=180;i++){const v=start+(end-start)*i/180;d+=(i?'L':'M')+p.x(v).toFixed(2)+','+p.y(fn(v)).toFixed(2);}return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}"/>`;}
 function dot(p,x,y,color,r=5){return `<circle cx="${p.x(x)}" cy="${p.y(y)}" r="${r}" fill="${color}" stroke="white" stroke-width="1.6"/>`;}
 function renderLinear(exact){const w=exact?.w??+$('weight').value,b=exact?.b??+$('bias').value;$('weightOut').textContent=w.toFixed(2);$('biasOut').textContent=b.toFixed(2);$('mseOut').textContent=mse(w,b).toFixed(2);const p=chart('linearPlot');let body=pathLine(p,x=>w*x+b,0,11);for(const d of LINEAR_DATA){if($('residuals').checked)body+=`<line x1="${p.x(d.x)}" x2="${p.x(d.x)}" y1="${p.y(d.y)}" y2="${p.y(w*d.x+b)}" stroke="${C.red}" stroke-width="1.5" stroke-dasharray="4 3"/>`;body+=dot(p,d.x,d.y,C.blue);}p.finish(body);$('linearReadout').textContent=`当前 ŷ = ${w.toFixed(2)}x + ${b.toFixed(2)}；学习 6 小时的预测分数为 ${(w*6+b).toFixed(1)} 分。`+(exact?' 已显示最小二乘最优值；拖动滑块可继续比较。':'');}
@@ -70,28 +71,30 @@ const GALTON_FREQ=[[64,61.7,1],[64,63.2,2],[64,64.2,4],[64,65.2,1],[64,66.2,2],[
 const GALTON_PTS=[];for(const [x,y,n] of GALTON_FREQ)for(let i=0;i<n;i++)GALTON_PTS.push({x,y});
 const galtonFit=fitXY(GALTON_PTS);
 function renderGalton(){
-  if(!$('galtonPlot'))return;
+  const svg=ensureSvg('galtonPlot');
+  if(!svg||!$('galtonW'))return;
   $('galtonW').textContent=galtonFit.w.toFixed(3);
-  $('galtonB').textContent=`b̂ = ${galtonFit.b.toFixed(2)} 英寸`;
+  $('galtonB').textContent='b̂ = '+galtonFit.b.toFixed(2)+' 英寸';
   $('galtonR').textContent=galtonFit.r.toFixed(3);
   const p=chart('galtonPlot',{xmin:63.5,xmax:73.5,ymin:61,ymax:75,xlabel:'中亲身高 / 英寸',ylabel:'子女身高 / 英寸',xticks:[64,66,68,70,72],yticks:[62,64,66,68,70,72,74]});
   let body=pathLine(p,x=>galtonFit.w*x+galtonFit.b,63.5,73.5,C.blue,2.8);
-  if($('galtonYX').checked) body+=pathLine(p,x=>x,63.5,73.5,C.red,1.8);
+  if($('galtonYX')&&$('galtonYX').checked) body+=pathLine(p,x=>x,63.5,73.5,C.red,1.8);
   const maxN=Math.max(...GALTON_FREQ.map(d=>d[2]));
   for(const [x,y,n] of GALTON_FREQ){const r=3.2+7*Math.sqrt(n/maxN);body+=`<circle cx="${p.x(x)}" cy="${p.y(y)}" r="${r.toFixed(2)}" fill="${C.blue}" fill-opacity="0.28" stroke="${C.blue}" stroke-opacity="0.55" stroke-width="1"/>`;}
   p.finish(body);
-  $('galtonReadout').textContent=`n = ${galtonFit.n}，R² = ${galtonFit.r2.toFixed(3)}。ŵ = ${galtonFit.w.toFixed(3)} < 1：高身材父母的子女平均仍偏高，但更靠近总体均值。这是“回归到均值”，不是身高一代代变矮。`;
+  if($('galtonReadout'))$('galtonReadout').textContent=`n = ${galtonFit.n}，R² = ${galtonFit.r2.toFixed(3)}。ŵ = ${galtonFit.w.toFixed(3)} < 1：高身材父母的子女平均仍偏高，但更靠近总体均值。这是“回归到均值”，不是身高一代代变矮。`;
 }
-$('galtonYX').onchange=renderGalton;renderGalton();
+try{if($('galtonYX'))$('galtonYX').onchange=renderGalton;renderGalton();}catch(err){console.error(err);}
 
 const ORINGS=[{t:53,y:1},{t:57,y:1},{t:58,y:1},{t:63,y:1},{t:66,y:0},{t:67,y:0},{t:67,y:0},{t:67,y:0},{t:68,y:0},{t:69,y:0},{t:70,y:1},{t:70,y:0},{t:70,y:1},{t:70,y:0},{t:72,y:0},{t:73,y:0},{t:75,y:0},{t:75,y:1},{t:76,y:0},{t:76,y:0},{t:78,y:0},{t:79,y:0},{t:81,y:0}];
 const oringFit=logisticMLE(ORINGS.map(d=>d.t),ORINGS.map(d=>d.y));
 function renderOring(){
-  if(!$('oringPlot'))return;
+  const svg=ensureSvg('oringPlot');
+  if(!svg||!$('oringP'))return;
   const T=+$('oringT').value;const pr=sigmoid(oringFit.w*T+oringFit.b);
-  $('oringTOut').textContent=String(T);
+  if($('oringTOut'))$('oringTOut').textContent=String(T);
   $('oringP').textContent=(100*pr).toFixed(2)+'%';
-  $('oringCoef').textContent=`ŵ = ${oringFit.w.toFixed(3)} /°F，b̂ = ${oringFit.b.toFixed(2)}`;
+  if($('oringCoef'))$('oringCoef').textContent='ŵ = '+oringFit.w.toFixed(3)+' /°F，b̂ = '+oringFit.b.toFixed(2);
   const p=chart('oringPlot',{xmin:28,xmax:85,ymin:-0.08,ymax:1.08,xlabel:'发射温度 / °F',ylabel:'热损伤概率',xticks:[31,40,50,60,70,80],yticks:[0,.25,.5,.75,1]});
   let body=pathLine(p,x=>sigmoid(oringFit.w*x+oringFit.b),28,85,C.mint,3);
   body+=`<line x1="${p.x(31)}" x2="${p.x(31)}" y1="${p.y(-0.08)}" y2="${p.y(1.08)}" stroke="${C.red}" stroke-width="1.6" stroke-dasharray="6 4"/>`;
@@ -100,9 +103,13 @@ function renderOring(){
   ORINGS.forEach((d,i)=>{seen[d.t]=(seen[d.t]||0)+1;const dx=(seen[d.t]-1)*0.55;body+=d.y?dot(p,d.t+dx,1,C.mint,6):diamond(p,d.t+dx,0,C.blue,7);});
   body+=dot(p,T,pr,C.red,7);
   p.finish(body);
-  $('oringReadout').textContent=T<=35?`发射日约 ${T}°F，样本内拟合给出的损伤概率约为 ${(100*pr).toFixed(2)}%。训练点最低 53°F，31°F 是强外推，这也是该案例被反复讨论的原因。`:`T = ${T}°F 时，p̂ = ${(100*pr).toFixed(2)}%。温度升高，拟合概率下降。`;
+  if($('oringReadout'))$('oringReadout').textContent=T<=35?`发射日约 ${T}°F，样本内拟合给出的损伤概率约为 ${(100*pr).toFixed(2)}%。训练点最低 53°F，31°F 是强外推。`:`T = ${T}°F 时，p̂ = ${(100*pr).toFixed(2)}%。温度升高，拟合概率下降。`;
 }
-$('oringT').oninput=renderOring;document.querySelectorAll('[data-oring]').forEach(b=>b.onclick=()=>{$('oringT').value=b.dataset.oring;renderOring();});renderOring();
+try{
+  if($('oringT'))$('oringT').oninput=renderOring;
+  document.querySelectorAll('[data-oring]').forEach(b=>b.onclick=()=>{$('oringT').value=b.dataset.oring;renderOring();});
+  renderOring();
+}catch(err){console.error(err);}
 
 
 const QUIZZES=[{q:'1. 单个样本的预测误差从 2 分变成 4 分，它对平方损失的贡献变为原来的几倍？',a:['2 倍','4 倍','不变'],correct:1,why:'4²/2² = 4。平方损失会更强地惩罚较大的误差。'}, {q:'2. 模型固定，只把分类阈值从 0.5 改成 0.7，哪些数值一定保持不变？',a:['每个样本的预测概率','混淆矩阵','召回率'],correct:0,why:'阈值改变决策规则，模型的参数和预测概率没有变化，平均 LogLoss 也保持不变。'}, {q:'3. 在二维原始特征上，标准逻辑回归的 Sigmoid 是曲线，因此决策边界一定弯曲。',a:['正确','错误'],correct:1,why:'阈值0.5下边界满足 w₁x₁ + w₂x₂ + b = 0。非零权重时是直线，S形的是概率对线性得分的映射。'}, {q:'4. 测试集上的 R² = −0.2 说明什么？',a:['程序必定算错了','比该评价集均值基线更差','准确率是 −20%'],correct:1,why:'R² 可以为负，它不是分类准确率。预测残差平方和大于均值基线的平方和时就会出现负值。'}, {q:'5. 哪个预处理流程正确？',a:['全体标准化，再划分','先划分，仅用训练集拟合标准化'],correct:1,why:'先划分，再用训练集fit预处理，验证集和测试集只transform，避免信息泄漏。'}, {q:'6. 在经典机器学习里，线性回归和逻辑回归首先应被理解为？',a:['无监督聚类方法','监督学习中的线性基线模型','必须配合神经网络才能使用'],correct:1,why:'二者都从特征的线性加权出发，用标签学习参数，适合作为可解释的监督学习基线。'}, {q:'7. Anscombe 四组数据的 r 和拟合直线几乎相同，因此散点图也一定相似。',a:['正确','错误'],correct:1,why:'这正是 Anscombe (1973) 的论点：摘要统计可以完全一致，图形结构却完全不同。'}, {q:'8. Galton 亲子身高的拟合斜率约为 0.65 < 1，含义是？',a:['子女一代代变矮','高身材父母的子女平均更靠近总体均值','相关系数为负'],correct:1,why:'回归到均值：极端值的下一代期望更靠近均值，平均身高并没有系统下降。'}, {q:'9. 用挑战者号 23 次飞行拟合逻辑回归后，31°F 的损伤概率与 70°F 相比？',a:['差不多','明显更低','明显更高，且 31°F 低于训练温度范围'],correct:2,why:'样本内拟合在低温端概率很高；31°F 低于最低训练点 53°F，属于外推。'}];
