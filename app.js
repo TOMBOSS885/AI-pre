@@ -41,6 +41,60 @@ for(const id of ['w1','w2','b2'])$(id).oninput=renderBoundary;$('boundaryReset')
 
 function fitXY(data){const n=data.length,mx=data.reduce((s,d)=>s+d.x,0)/n,my=data.reduce((s,d)=>s+d.y,0)/n;const sxx=data.reduce((s,d)=>s+(d.x-mx)**2,0),sxy=data.reduce((s,d)=>s+(d.x-mx)*(d.y-my),0),syy=data.reduce((s,d)=>s+(d.y-my)**2,0);const w=sxy/sxx,b=my-w*mx,sse=data.reduce((s,d)=>s+(w*d.x+b-d.y)**2,0);return {n,mx,my,w,b,r:sxy/Math.sqrt(sxx*syy),r2:1-sse/syy,mse:sse/n};}
 function logisticMLE(xs,ys){let w=0,b=0;const n=xs.length;for(let k=0;k<40;k++){const ps=xs.map(x=>sigmoid(w*x+b));let gw=0,gb=0,hww=0,hwb=0,hbb=0;for(let i=0;i<n;i++){const p=ps[i],x=xs[i],y=ys[i],g=p*(1-p);gw+=(p-y)*x;gb+=(p-y);hww+=g*x*x;hwb+=g*x;hbb+=g;}gw/=n;gb/=n;hww/=n;hwb/=n;hbb/=n;const det=hww*hbb-hwb*hwb;if(Math.abs(det)<1e-18)break;const dw=(hbb*gw-hwb*gb)/det,db=(-hwb*gw+hww*gb)/det;w-=dw;b-=db;if(Math.abs(dw)+Math.abs(db)<1e-12)break;}return {w,b};}
+function binomialMLE(xs,ys,ns){let w=0,b=0;for(let k=0;k<50;k++){const ps=xs.map(x=>sigmoid(w*x+b));let gw=0,gb=0,hww=0,hwb=0,hbb=0;for(let i=0;i<xs.length;i++){const p=ps[i],x=xs[i],n=ns[i],y=ys[i],g=n*p*(1-p);gw+=(n*p-y)*x;gb+=(n*p-y);hww+=g*x*x;hwb+=g*x;hbb+=g;}const det=hww*hbb-hwb*hwb;if(Math.abs(det)<1e-18)break;const dw=(hbb*gw-hwb*gb)/det,db=(-hwb*gw+hww*gb)/det;w-=dw;b-=db;if(Math.abs(dw)+Math.abs(db)<1e-12)break;}return {w,b};}
+
+const HUBBLE=[{x:0.032,y:170},{x:0.034,y:290},{x:0.214,y:-130},{x:0.263,y:-70},{x:0.275,y:-185},{x:0.275,y:-220},{x:0.45,y:200},{x:0.5,y:290},{x:0.5,y:270},{x:0.63,y:200},{x:0.8,y:300},{x:0.9,y:-30},{x:0.9,y:650},{x:0.9,y:150},{x:0.9,y:500},{x:1.0,y:920},{x:1.1,y:450},{x:1.1,y:500},{x:1.4,y:500},{x:1.7,y:960},{x:2.0,y:500},{x:2.0,y:850},{x:2.0,y:800},{x:2.0,y:1090}];
+const hubbleOLS=fitXY(HUBBLE);
+function hubbleMSE(w,b){return HUBBLE.reduce((s,d)=>s+(w*d.x+b-d.y)**2,0)/HUBBLE.length;}
+function renderHubble(){
+  if(!$('hubblePlot')||!$('hubbleY'))return;
+  const w=+$('hubbleW').value, b=hubbleOLS.my-w*hubbleOLS.mx, r=+$('hubbleX').value, yhat=w*r+b, mseNow=hubbleMSE(w,b);
+  $('hubbleWOut').textContent=w.toFixed(0);
+  $('hubbleXOut').textContent=r.toFixed(2);
+  $('hubbleY').textContent=yhat.toFixed(0);
+  $('hubbleMse').textContent=mseNow.toFixed(0);
+  $('hubbleCoef').textContent=(Math.abs(w-hubbleOLS.w)<1?'已对准最小二乘 ŵ = '+hubbleOLS.w.toFixed(1):'最小二乘 MSE = '+hubbleOLS.mse.toFixed(0)+'，ŵ = '+hubbleOLS.w.toFixed(1));
+  const p=chart('hubblePlot',{xmin:0,xmax:2.25,ymin:-350,ymax:1200,xlabel:'距离 r / Mpc',ylabel:'退行速度 / km s⁻¹',xticks:[0,.5,1,1.5,2],yticks:[-200,0,200,400,600,800,1000]});
+  let body=pathLine(p,x=>w*x+b,0,2.25,C.blue,2.8);
+  for(const d of HUBBLE){body+=`<line x1="${p.x(d.x)}" x2="${p.x(d.x)}" y1="${p.y(d.y)}" y2="${p.y(w*d.x+b)}" stroke="${C.red}" stroke-width="1.2" stroke-dasharray="3 3"/>`;body+=dot(p,d.x,d.y,C.blue,5);}
+  body+=`<path d="M${p.x(r)},${p.y(-350)}L${p.x(r)},${p.y(yhat)}L${p.x(0)},${p.y(yhat)}" fill="none" stroke="${C.mint}" stroke-dasharray="5 4"/>`+dot(p,r,yhat,C.red,7);
+  p.finish(body);
+  $('hubbleReadout').textContent=`ŷ = ${w.toFixed(0)} r + (${b.toFixed(0)})。r = ${r.toFixed(2)} Mpc 时预测 ${yhat.toFixed(0)} km/s。斜率为 Hubble 当年标尺下的 H₀，不是今天的 ~70。`;
+}
+try{
+  if($('hubbleW'))$('hubbleW').oninput=renderHubble;
+  if($('hubbleX'))$('hubbleX').oninput=renderHubble;
+  if($('hubbleFit'))$('hubbleFit').onclick=()=>{$('hubbleW').value=Math.round(hubbleOLS.w);renderHubble();};
+  renderHubble();
+}catch(err){console.error(err);}
+
+const BEETLE=[{x:1.6907,n:59,y:6},{x:1.7242,n:60,y:13},{x:1.7552,n:62,y:18},{x:1.7842,n:56,y:28},{x:1.8113,n:63,y:52},{x:1.8369,n:59,y:53},{x:1.8610,n:62,y:61},{x:1.8839,n:60,y:60}];
+const beetleFit=binomialMLE(BEETLE.map(d=>d.x),BEETLE.map(d=>d.y),BEETLE.map(d=>d.n));
+const beetleLine=fitXY(BEETLE.map(d=>({x:d.x,y:d.y/d.n})));
+const beetleLD50=-beetleFit.b/beetleFit.w;
+function renderBeetle(){
+  if(!$('beetlePlot')||!$('beetleP'))return;
+  const x=+$('beetleX').value, pr=sigmoid(beetleFit.w*x+beetleFit.b);
+  $('beetleXOut').textContent=x.toFixed(3);
+  $('beetleP').textContent=(100*pr).toFixed(1)+'%';
+  $('beetleCoef').textContent='LD50: log10 dose = '+beetleLD50.toFixed(3);
+  const p=chart('beetlePlot',{xmin:1.66,xmax:1.91,ymin:-0.15,ymax:1.15,xlabel:'log₁₀(CS₂ 剂量)',ylabel:'死亡比例',xticks:[1.69,1.73,1.77,1.81,1.85,1.89],yticks:[0,.25,.5,.75,1]});
+  let body=pathLine(p,z=>sigmoid(beetleFit.w*z+beetleFit.b),1.66,1.91,C.mint,3);
+  if($('beetleLinear')&&$('beetleLinear').checked) body+=pathLine(p,z=>beetleLine.w*z+beetleLine.b,1.66,1.91,C.red,2);
+  body+=`<line x1="${p.x(beetleLD50)}" x2="${p.x(beetleLD50)}" y1="${p.y(-0.15)}" y2="${p.y(0.5)}" stroke="${C.red}" stroke-dasharray="6 4"/><line x1="${p.x(1.66)}" x2="${p.x(beetleLD50)}" y1="${p.y(0.5)}" y2="${p.y(0.5)}" stroke="${C.red}" stroke-dasharray="6 4"/>`;
+  const maxN=Math.max(...BEETLE.map(d=>d.n));
+  for(const d of BEETLE){const rr=5+7*Math.sqrt(d.n/maxN);body+=`<circle cx="${p.x(d.x)}" cy="${p.y(d.y/d.n)}" r="${rr.toFixed(2)}" fill="${C.mint}" fill-opacity="0.35" stroke="${C.mint}" stroke-width="1.5"/>`;}
+  body+=`<path d="M${p.x(x)},${p.y(-0.15)}L${p.x(x)},${p.y(pr)}L${p.x(1.66)},${p.y(pr)}" fill="none" stroke="${C.blue}" stroke-dasharray="5 4"/>`+dot(p,x,pr,C.red,7);
+  p.finish(body);
+  const lin=beetleLine.w*x+beetleLine.b;
+  $('beetleReadout').textContent=($('beetleLinear')&&$('beetleLinear').checked)?`同一剂量下，逻辑回归 p̂ = ${(100*pr).toFixed(1)}%，普通直线给出 ${(100*lin).toFixed(1)}%${(lin<0||lin>1)?'，已经落在 [0,1] 外面。':'。'}`:`p̂ = σ(${beetleFit.w.toFixed(1)}x + (${beetleFit.b.toFixed(1)}))。LD50 处死亡与存活各半，剂量约 ${Math.pow(10,beetleLD50).toFixed(1)}（相对单位）。`;
+}
+try{
+  if($('beetleX'))$('beetleX').oninput=renderBeetle;
+  if($('beetleLinear'))$('beetleLinear').onchange=renderBeetle;
+  document.querySelectorAll('[data-beetle]').forEach(b=>b.onclick=()=>{$('beetleX').value=b.dataset.beetle;renderBeetle();});
+  renderBeetle();
+}catch(err){console.error(err);}
 
 const ANSCOMBE=[
   {name:'I · 线性散点',pts:[{x:10,y:8.04},{x:8,y:6.95},{x:13,y:7.58},{x:9,y:8.81},{x:11,y:8.33},{x:14,y:9.96},{x:6,y:7.24},{x:4,y:4.26},{x:12,y:10.84},{x:7,y:4.82},{x:5,y:5.68}]},
@@ -112,7 +166,7 @@ try{
 }catch(err){console.error(err);}
 
 
-const QUIZZES=[{q:'1. 单个样本的预测误差从 2 分变成 4 分，它对平方损失的贡献变为原来的几倍？',a:['2 倍','4 倍','不变'],correct:1,why:'4²/2² = 4。平方损失会更强地惩罚较大的误差。'}, {q:'2. 模型固定，只把分类阈值从 0.5 改成 0.7，哪些数值一定保持不变？',a:['每个样本的预测概率','混淆矩阵','召回率'],correct:0,why:'阈值改变决策规则，模型的参数和预测概率没有变化，平均 LogLoss 也保持不变。'}, {q:'3. 在二维原始特征上，标准逻辑回归的 Sigmoid 是曲线，因此决策边界一定弯曲。',a:['正确','错误'],correct:1,why:'阈值0.5下边界满足 w₁x₁ + w₂x₂ + b = 0。非零权重时是直线，S形的是概率对线性得分的映射。'}, {q:'4. 测试集上的 R² = −0.2 说明什么？',a:['程序必定算错了','比该评价集均值基线更差','准确率是 −20%'],correct:1,why:'R² 可以为负，它不是分类准确率。预测残差平方和大于均值基线的平方和时就会出现负值。'}, {q:'5. 哪个预处理流程正确？',a:['全体标准化，再划分','先划分，仅用训练集拟合标准化'],correct:1,why:'先划分，再用训练集fit预处理，验证集和测试集只transform，避免信息泄漏。'}, {q:'6. 在经典机器学习里，线性回归和逻辑回归首先应被理解为？',a:['无监督聚类方法','监督学习中的线性基线模型','必须配合神经网络才能使用'],correct:1,why:'二者都从特征的线性加权出发，用标签学习参数，适合作为可解释的监督学习基线。'}, {q:'7. Anscombe 四组数据的 r 和拟合直线几乎相同，因此散点图也一定相似。',a:['正确','错误'],correct:1,why:'这正是 Anscombe (1973) 的论点：摘要统计可以完全一致，图形结构却完全不同。'}, {q:'8. Galton 亲子身高的拟合斜率约为 0.65 < 1，含义是？',a:['子女一代代变矮','高身材父母的子女平均更靠近总体均值','相关系数为负'],correct:1,why:'回归到均值：极端值的下一代期望更靠近均值，平均身高并没有系统下降。'}, {q:'9. 用挑战者号 23 次飞行拟合逻辑回归后，31°F 的损伤概率与 70°F 相比？',a:['差不多','明显更低','明显更高，且 31°F 低于训练温度范围'],correct:2,why:'样本内拟合在低温端概率很高；31°F 低于最低训练点 53°F，属于外推。'}];
+const QUIZZES=[{q:'1. 单个样本的预测误差从 2 分变成 4 分，它对平方损失的贡献变为原来的几倍？',a:['2 倍','4 倍','不变'],correct:1,why:'4²/2² = 4。平方损失会更强地惩罚较大的误差。'}, {q:'2. 模型固定，只把分类阈值从 0.5 改成 0.7，哪些数值一定保持不变？',a:['每个样本的预测概率','混淆矩阵','召回率'],correct:0,why:'阈值改变决策规则，模型的参数和预测概率没有变化，平均 LogLoss 也保持不变。'}, {q:'3. 在二维原始特征上，标准逻辑回归的 Sigmoid 是曲线，因此决策边界一定弯曲。',a:['正确','错误'],correct:1,why:'阈值0.5下边界满足 w₁x₁ + w₂x₂ + b = 0。非零权重时是直线，S形的是概率对线性得分的映射。'}, {q:'4. 测试集上的 R² = −0.2 说明什么？',a:['程序必定算错了','比该评价集均值基线更差','准确率是 −20%'],correct:1,why:'R² 可以为负，它不是分类准确率。预测残差平方和大于均值基线的平方和时就会出现负值。'}, {q:'5. 哪个预处理流程正确？',a:['全体标准化，再划分','先划分，仅用训练集拟合标准化'],correct:1,why:'先划分，再用训练集fit预处理，验证集和测试集只transform，避免信息泄漏。'}, {q:'6. 在经典机器学习里，线性回归和逻辑回归首先应被理解为？',a:['无监督聚类方法','监督学习中的线性基线模型','必须配合神经网络才能使用'],correct:1,why:'二者都从特征的线性加权出发，用标签学习参数，适合作为可解释的监督学习基线。'}, {q:'7. Anscombe 四组数据的 r 和拟合直线几乎相同，因此散点图也一定相似。',a:['正确','错误'],correct:1,why:'这正是 Anscombe (1973) 的论点：摘要统计可以完全一致，图形结构却完全不同。'}, {q:'8. Galton 亲子身高的拟合斜率约为 0.65 < 1，含义是？',a:['子女一代代变矮','高身材父母的子女平均更靠近总体均值','相关系数为负'],correct:1,why:'回归到均值：极端值的下一代期望更靠近均值，平均身高并没有系统下降。'}, {q:'9. 用挑战者号 23 次飞行拟合逻辑回归后，31°F 的损伤概率与 70°F 相比？',a:['差不多','明显更低','明显更高，且 31°F 低于训练温度范围'],correct:2,why:'样本内拟合在低温端概率很高；31°F 低于最低训练点 53°F，属于外推。'}, {q:'10. 对甲虫死亡比例直接做直线最小二乘，主要问题是什么？',a:['计算量太大','直线可能给出小于 0 或大于 1 的“概率”','必须先做梯度下降'],correct:1,why:'概率有界。Bliss 的剂量–死亡数据上，逻辑回归把输出限制在 (0,1)，普通直线不会。'}];
 $('quizList').innerHTML=QUIZZES.map((q,i)=>`<article class="quiz-card"><h3>${esc(q.q)}</h3><div class="quiz-options">${q.a.map((a,j)=>`<button data-quiz="${i}" data-answer="${j}">${esc(a)}</button>`).join('')}</div><p class="feedback" id="feedback${i}" aria-live="polite">选择答案后查看解析。</p></article>`).join('');document.querySelectorAll('[data-quiz]').forEach(b=>b.onclick=()=>{const i=+b.dataset.quiz,j=+b.dataset.answer,q=QUIZZES[i];document.querySelectorAll(`[data-quiz="${i}"]`).forEach(x=>x.classList.toggle('chosen',x===b));$('feedback'+i).textContent=(j===q.correct?'回答正确。':'再想一想。')+q.why;$('feedback'+i).style.color=j===q.correct?C.mint:C.red;});
 
 // Optional standard WebMCP surface; the full page also works in browsers without it.

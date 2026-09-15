@@ -14,6 +14,8 @@
 
 | 试验 | 文献 | 本页核对 |
 |---|---|---|
+| Hubble 退行速度 | Hubble (1929), *PNAS* [doi](https://doi.org/10.1073/pnas.15.3.168) | ŵ≈454 km s⁻¹ Mpc⁻¹，可拖斜率对照 MSE |
+| Bliss 甲虫剂量 | Bliss (1935), *Ann. Appl. Biol.* [doi](https://doi.org/10.1111/j.1744-7348.1935.tb07713.x) | 二项 logit，LD50≈1.772；直线会越出 [0,1] |
 | Anscombe 四组 | Anscombe (1973), *Am. Stat.* [doi](https://doi.org/10.1080/00031305.1973.10478966) | ŵ≈0.500，r≈0.816，图结构不同 |
 | Galton 身高 | Galton (1886) [doi](https://doi.org/10.2307/2841583)；HistData::Galton | n=928，ŵ≈0.646 < 1 |
 | 挑战者号 O 形环 | Dalal, Fowlkes & Hoadley (1989) [doi](https://doi.org/10.1080/01621459.1989.10478858)；DAAG::orings | 逻辑回归，31°F 的 p̂≈0.9996，属外推 |
