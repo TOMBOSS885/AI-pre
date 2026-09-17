@@ -185,3 +185,253 @@ if(demoContext?.registerTool){
     return {content:[{type:'text',text:result}]};}}, {signal:lifecycle.signal})).catch(()=>{}); } catch {}
   window.addEventListener('pagehide',()=>lifecycle.abort(),{once:true});
 }
+
+
+(function playgroundLab(){
+  const plot=document.getElementById('pgPlot');
+  const lossCanvas=document.getElementById('pgLoss');
+  if(!plot||!lossCanvas)return;
+  const ctx=plot.getContext('2d');
+  const lctx=lossCanvas.getContext('2d');
+  const pg=id=>document.getElementById(id);
+  let mode='linear', samples=[], w=0, b=0, history=[], dragging=-1, lastClick=0, timer=null;
+  const W=plot.width, H=plot.height, pad={l:52,r:18,t:22,b:44};
+  const nRange=pg('pgN'), noiseRange=pg('pgNoise'), seedRange=pg('pgSeed'), lrRange=pg('pgLr');
+  const ink='#1b2433', grid='#e4ddd0', paper='#fffcf6', blue='#1d4ed8', mint='#0f766e', red='#b4233a';
+
+  function rng(seed){let x=seed>>>0;return()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return (x>>>0)/4294967296;};}
+  function gauss(rand){let u=0,v=0;while(u===0)u=rand();while(v===0)v=rand();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+  function sig(z){return 1/(1+Math.exp(-Math.max(-60,Math.min(60,z))));}
+  function xPix(x){return pad.l+(x+5)/10*(W-pad.l-pad.r);}
+  function yPix(y){return H-pad.b-(y-(-5))/10*(H-pad.t-pad.b);}
+  function xVal(px){return (px-pad.l)/(W-pad.l-pad.r)*10-5;}
+  function yVal(py){return -5+(H-pad.b-py)/(H-pad.t-pad.b)*10;}
+
+  function generate(){
+    const rand=rng(+seedRange.value), n=+nRange.value, noise=+noiseRange.value;
+    samples=[];
+    if(mode==='linear'){
+      for(let i=0;i<n;i++){const x=-4+rand()*8;samples.push({x,y:1.05*x+0.65+gauss(rand)*noise});}
+    }else{
+      for(let i=0;i<n;i++){const x=-4+rand()*8;samples.push({x,y:rand()<sig(-0.95*x+0.25)?1:0});}
+    }
+    resetModel();
+  }
+  function resetModel(){w=0;b=0;history=[];syncInputs();draw();}
+  function syncInputs(){pg('pgW').value=w.toFixed(4);pg('pgB').value=b.toFixed(4);}
+
+  function updateLabels(){
+    pg('pgNOut').textContent=nRange.value;
+    pg('pgNoiseOut').textContent=(+noiseRange.value).toFixed(1);
+    pg('pgSeedOut').textContent=seedRange.value;
+    pg('pgLrOut').textContent=(+lrRange.value).toFixed(3);
+    pg('pgTitle').textContent=mode==='linear'?'线性回归：拟合一条直线':'逻辑回归：拟合概率与分类边界';
+    pg('pgLinear').classList.toggle('primary',mode==='linear');
+    pg('pgLogistic').classList.toggle('primary',mode==='logistic');
+    pg('pgLegend').innerHTML=mode==='linear'
+      ? '<span><i class="dot blue"></i>样本点</span><span><i class="line-key"></i>回归直线</span><span><i class="line-key red"></i>残差</span>'
+      : '<span><i class="dot blue"></i>类别 0</span><span><i class="dot mint"></i>类别 1</span><span><i class="line-key"></i>sigmoid 概率</span><span><i class="line-key red"></i>决策边界</span>';
+    pg('pgTip').textContent=mode==='linear'
+      ? '教学提示：拖动一个点，观察残差和 MSE；再单步训练，看 w、b 往哪边走。'
+      : '教学提示：点的上下表示类别 0/1。单步训练时看交叉熵是否下降，以及 S 形曲线如何移动。';
+  }
+
+  function drawAxes(){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle=paper;ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle=grid;ctx.lineWidth=1;
+    for(let v=-5;v<=5;v++){
+      const xp=xPix(v), yp=yPix(v);
+      ctx.beginPath();ctx.moveTo(xp,pad.t);ctx.lineTo(xp,H-pad.b);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(pad.l,yp);ctx.lineTo(W-pad.r,yp);ctx.stroke();
+    }
+    ctx.strokeStyle=ink;ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,H-pad.b);ctx.lineTo(W-pad.r,H-pad.b);ctx.stroke();
+    ctx.fillStyle='#5c6576';ctx.font='12px Microsoft YaHei, sans-serif';
+    for(let v=-4;v<=4;v+=2) ctx.fillText(String(v),xPix(v)-4,H-pad.b+18);
+    ctx.fillText('x',xPix(5)-4,H-pad.b+18);
+    if(mode==='linear'){
+      for(let v=-4;v<=4;v+=2) ctx.fillText(String(v),pad.l-22,yPix(v)+4);
+      ctx.fillText('y',pad.l-20,pad.t+8);
+    }else{
+      [0,.25,.5,.75,1].forEach(p=>ctx.fillText(String(p),pad.l-24,yPix(-5+10*p)+4));
+      ctx.fillText('p',pad.l-20,pad.t+8);
+    }
+  }
+
+  function drawLinear(){
+    ctx.strokeStyle=blue;ctx.lineWidth=2.5;
+    ctx.beginPath();
+    [-5,5].forEach((x,i)=>{const px=xPix(x),py=yPix(w*x+b);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+    ctx.stroke();
+    samples.forEach(s=>{
+      const px=xPix(s.x), py=yPix(s.y);
+      ctx.strokeStyle=red;ctx.lineWidth=1;ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,yPix(w*s.x+b));ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle=blue;ctx.beginPath();ctx.arc(px,py,4.5,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#fffcf6';ctx.lineWidth=1.4;ctx.stroke();
+    });
+  }
+
+  function drawLogistic(){
+    ctx.strokeStyle=mint;ctx.lineWidth=2.5;
+    ctx.beginPath();
+    for(let i=0;i<=220;i++){
+      const x=-5+i/220*10, px=xPix(x), py=yPix(-5+10*sig(w*x+b));
+      i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+    }
+    ctx.stroke();
+    if(Math.abs(w)>1e-7){
+      const xb=-b/w;
+      if(xb>=-5&&xb<=5){
+        ctx.strokeStyle=red;ctx.setLineDash([6,4]);ctx.lineWidth=1.6;
+        ctx.beginPath();ctx.moveTo(xPix(xb),pad.t);ctx.lineTo(xPix(xb),H-pad.b);ctx.stroke();ctx.setLineDash([]);
+        ctx.fillStyle=red;ctx.font='12px Microsoft YaHei, sans-serif';
+        ctx.fillText('边界 x = '+xb.toFixed(2),xPix(xb)+6,pad.t+16);
+      }
+    }
+    samples.forEach(s=>{
+      const px=xPix(s.x), py=yPix(-5+10*s.y);
+      ctx.fillStyle=s.y===1?mint:blue;
+      ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#fffcf6';ctx.lineWidth=1.4;ctx.stroke();
+    });
+  }
+
+  function calcLoss(){
+    if(!samples.length) return 0;
+    if(mode==='linear') return samples.reduce((a,s)=>a+(w*s.x+b-s.y)**2,0)/samples.length;
+    let z=0;
+    for(const s of samples){
+      const p=Math.min(1-1e-12,Math.max(1e-12,sig(w*s.x+b)));
+      z+=-s.y*Math.log(p)-(1-s.y)*Math.log(1-p);
+    }
+    return z/samples.length;
+  }
+
+  function trainStep(){
+    if(!samples.length) return;
+    const lr=+lrRange.value;
+    let dw=0, db=0;
+    if(mode==='linear'){
+      for(const s of samples){const e=w*s.x+b-s.y;dw+=e*s.x;db+=e;}
+      dw*=2/samples.length; db*=2/samples.length;
+    }else{
+      for(const s of samples){const e=sig(w*s.x+b)-s.y;dw+=e*s.x;db+=e;}
+      dw/=samples.length; db/=samples.length;
+    }
+    w-=lr*dw; b-=lr*db;
+    history.push(calcLoss());
+    if(history.length>250) history.shift();
+    syncInputs(); draw();
+  }
+
+  function fit(){
+    if(timer){clearInterval(timer);timer=null;pg('pgFit').textContent='一键拟合';return;}
+    let count=0;
+    pg('pgFit').textContent='停止拟合';
+    timer=setInterval(()=>{
+      trainStep(); count++;
+      if(count>=180){clearInterval(timer);timer=null;pg('pgFit').textContent='一键拟合';}
+    },20);
+  }
+
+  function drawLoss(){
+    const cw=lossCanvas.width, ch=lossCanvas.height;
+    lctx.clearRect(0,0,cw,ch);
+    lctx.fillStyle=paper; lctx.fillRect(0,0,cw,ch);
+    if(history.length<2){
+      lctx.fillStyle='#5c6576'; lctx.font='14px Microsoft YaHei, sans-serif';
+      lctx.fillText('点击「单步训练」或「一键拟合」后显示损失曲线', 24, 40);
+      return;
+    }
+    const min=Math.min(...history), max=Math.max(...history), span=(max-min)||1;
+    lctx.strokeStyle=grid; lctx.lineWidth=1;
+    for(let i=0;i<5;i++){const y=22+i*(ch-48)/4;lctx.beginPath();lctx.moveTo(52,y);lctx.lineTo(cw-16,y);lctx.stroke();}
+    lctx.strokeStyle=blue; lctx.lineWidth=2.2; lctx.beginPath();
+    history.forEach((v,i)=>{
+      const x=52+i/(history.length-1)*(cw-70), y=22+(max-v)/span*(ch-48);
+      i?lctx.lineTo(x,y):lctx.moveTo(x,y);
+    });
+    lctx.stroke();
+    lctx.fillStyle='#5c6576'; lctx.font='12px Microsoft YaHei, sans-serif';
+    lctx.fillText(max.toFixed(3), 6, 26);
+    lctx.fillText(min.toFixed(3), 6, ch-18);
+    lctx.fillText('步数', cw-40, ch-8);
+  }
+
+  function draw(){
+    updateLabels(); drawAxes();
+    if(mode==='linear') drawLinear(); else drawLogistic();
+    const loss=calcLoss();
+    const metrics=mode==='linear'
+      ? [['样本数',samples.length],['w',w.toFixed(4)],['b',b.toFixed(4)],['MSE',loss.toFixed(5)]]
+      : [['样本数',samples.length],['w',w.toFixed(4)],['b',b.toFixed(4)],['交叉熵',loss.toFixed(5)]];
+    pg('pgMetrics').innerHTML=metrics.map(m=>`<div><small>${m[0]}</small><b>${m[1]}</b></div>`).join('');
+    pg('pgFormula').innerHTML=mode==='linear'
+      ? '<span>当前模型</span><b>ŷ = wx + b</b><p>损失 MSE = (1/n) Σ(ŷ − y)²。更新沿负梯度：w ← w − η ∂L/∂w。</p>'
+      : '<span>当前模型</span><b>p = σ(wx + b)</b><p>交叉熵 −(1/n) Σ[y ln p + (1−y) ln(1−p)]。p ≥ 0.5 判为正类。</p>';
+    pg('pgSteps').innerHTML=mode==='linear'
+      ? '<li>初始化 w、b</li><li>计算 ŷ 与残差</li><li>用 MSE 的梯度更新</li><li>重复直到损失下降变缓</li>'
+      : '<li>初始化 w、b</li><li>计算 z 与 sigmoid 概率</li><li>用交叉熵梯度更新</li><li>0.5 是常用分类阈值</li>';
+    pg('pgReadout').textContent=samples.length
+      ? (mode==='linear'?'当前 MSE = ':'当前交叉熵 = ')+loss.toFixed(5)
+      : '画布是空的。生成样本，或在图上单击加点。';
+    drawLoss();
+  }
+
+  pg('pgLinear').onclick=()=>{if(timer){clearInterval(timer);timer=null;pg('pgFit').textContent='一键拟合';}mode='linear';generate();};
+  pg('pgLogistic').onclick=()=>{if(timer){clearInterval(timer);timer=null;pg('pgFit').textContent='一键拟合';}mode='logistic';generate();};
+  pg('pgGen').onclick=generate;
+  pg('pgClear').onclick=()=>{samples=[];history=[];draw();};
+  pg('pgFit').onclick=fit;
+  pg('pgStep').onclick=trainStep;
+  pg('pgReset').onclick=resetModel;
+  [nRange,noiseRange,seedRange].forEach(el=>el.addEventListener('input',()=>{updateLabels();generate();}));
+  lrRange.addEventListener('input',()=>{pg('pgLrOut').textContent=(+lrRange.value).toFixed(3);});
+  pg('pgW').addEventListener('change',e=>{w=+e.target.value||0;history=[];draw();});
+  pg('pgB').addEventListener('change',e=>{b=+e.target.value||0;history=[];draw();});
+
+  plot.addEventListener('mousedown',e=>{
+    const r=plot.getBoundingClientRect(), px=(e.clientX-r.left)*plot.width/r.width, py=(e.clientY-r.top)*plot.height/r.height;
+    let best=-1, bd=16;
+    samples.forEach((s,i)=>{
+      const sy=mode==='linear'?yPix(s.y):yPix(-5+10*s.y);
+      const d=Math.hypot(px-xPix(s.x), py-sy);
+      if(d<bd){bd=d;best=i;}
+    });
+    if(best>=0) dragging=best;
+    else{
+      const now=Date.now();
+      if(now-lastClick<280){lastClick=0;return;}
+      lastClick=now;
+      const x=Math.max(-5,Math.min(5,xVal(px)));
+      if(mode==='linear') samples.push({x,y:Math.max(-5,Math.min(5,yVal(py)))});
+      else samples.push({x,y:py<(pad.t+H-pad.b)/2?1:0});
+      history=[]; draw();
+    }
+  });
+  plot.addEventListener('mousemove',e=>{
+    if(dragging<0) return;
+    const r=plot.getBoundingClientRect(), px=(e.clientX-r.left)*plot.width/r.width, py=(e.clientY-r.top)*plot.height/r.height;
+    const s=samples[dragging];
+    s.x=Math.max(-5,Math.min(5,xVal(px)));
+    if(mode==='linear') s.y=Math.max(-5,Math.min(5,yVal(py)));
+    else s.y=py<(pad.t+H-pad.b)/2?1:0;
+    history=[]; draw();
+  });
+  window.addEventListener('mouseup',()=>dragging=-1);
+  plot.addEventListener('dblclick',e=>{
+    e.preventDefault();
+    const r=plot.getBoundingClientRect(), px=(e.clientX-r.left)*plot.width/r.width, py=(e.clientY-r.top)*plot.height/r.height;
+    let best=-1, bd=18;
+    samples.forEach((s,i)=>{
+      const sy=mode==='linear'?yPix(s.y):yPix(-5+10*s.y);
+      const d=Math.hypot(px-xPix(s.x), py-sy);
+      if(d<bd){bd=d;best=i;}
+    });
+    if(best>=0){samples.splice(best,1);history=[];draw();}
+  });
+
+  generate();
+})();
