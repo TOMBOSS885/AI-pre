@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>线性回归与逻辑回归｜交互式实时可视化</title>
+
+<style>
+  :root{
+    --bg:#101214;
+    --panel:#17191c;
+    --panel2:#1c1f23;
+    --text:#f2f4f7;
+    --muted:#b8bec7;
+    --line:#3a3f46;
+    --line2:#2b3036;
+    --blue:#5aa7ff;
+    --blue2:#86c1ff;
+    --red:#ff6464;
+    --green:#66e091;
+    --purple:#c28cff;
+    --cyan:#68d7ff;
+  }
+  *{box-sizing:border-box}
+  html,body{min-height:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif;
+    color:var(--text);
+    font-size:14px;
+  }
+  .app{
+    max-width:1480px;
+    margin:0 auto;
+    padding:16px 18px 14px;
+  }
+
+  /* Header: plain and functional */
+  .header{
+    display:flex;
+    gap:18px;
+    justify-content:space-between;
+    align-items:flex-start;
+    margin-bottom:12px;
+    padding-bottom:10px;
+    border-bottom:1px solid var(--line);
+  }
+  .title h1{
+    margin:0;
+    font-size:23px;
+    line-height:1.25;
+    font-weight:600;
+    letter-spacing:.2px;
+    color:#fff;
+  }
+  .title p{
+    margin:6px 0 0;
+    color:var(--muted);
+    font-size:13px;
+  }
+  .badge{
+    padding:5px 8px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:transparent;
+    color:#d9dee6;
+    font-weight:400;
+    font-size:12px;
+    white-space:nowrap;
+  }
+
+  /* Toolbar: flatter, more like classic desktop software */
+  .toolbar{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    margin-bottom:10px;
+  }
+  button,select,input[type=number]{font:inherit}
+  button{
+    border:1px solid #4a5058;
+    background:#202328;
+    color:#f0f2f5;
+    padding:7px 11px;
+    border-radius:3px;
+    cursor:pointer;
+    box-shadow:none;
+  }
+  button:hover{
+    background:#292d33;
+    border-color:#626a74;
+  }
+  button.primary{
+    background:#2b5f96;
+    border-color:#4d80b5;
+    color:#fff;
+  }
+  button.primary:hover{background:#3470ae}
+  button.success{
+    background:#245d3b;
+    border-color:#3b8b59;
+    color:#fff;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:minmax(650px,1.55fr) minmax(330px,.9fr);
+    gap:10px;
+  }
+
+  /* Panels: rectangular + thin outlines */
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:3px;
+    box-shadow:none;
+    padding:11px;
+  }
+  .panel h2,.panel h3{
+    margin:0 0 9px;
+    color:#fff;
+    font-weight:600;
+  }
+  .panel h2{
+    font-size:17px;
+    line-height:1.3;
+  }
+  .panel h3{
+    font-size:14px;
+    margin-top:11px;
+  }
+
+  .canvasWrap{
+    position:relative;
+    background:#050607;
+    border-radius:2px;
+    border:1px solid #42474e;
+    overflow:hidden;
+  }
+  canvas{
+    display:block;
+    width:100%;
+    height:auto;
+    background:#050607;
+    cursor:crosshair;
+  }
+
+  /* The old canvas hint is intentionally not shown. */
+  .hint{display:none}
+
+  .two{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:7px;
+  }
+  .control{
+    padding:8px 9px;
+    border:1px solid var(--line2);
+    border-radius:2px;
+    background:var(--panel2);
+  }
+  .control label{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    font-size:12px;
+    font-weight:400;
+    margin-bottom:6px;
+    color:#fff;
+  }
+  .control .val{
+    color:var(--blue2);
+    font-variant-numeric:tabular-nums;
+  }
+
+  input[type=range]{
+    width:100%;
+    accent-color:#79b7ff;
+    height:18px;
+  }
+  input[type=number]{
+    width:100%;
+    padding:6px 7px;
+    border:1px solid #4a5058;
+    border-radius:2px;
+    background:#111317;
+    color:#fff;
+    outline:none;
+  }
+  input[type=number]:focus{
+    border-color:#6d9fd0;
+  }
+
+  .mode{
+    display:flex;
+    gap:5px;
+    margin-bottom:8px;
+  }
+  .mode button{
+    flex:1;
+    padding:7px 10px;
+    background:#202328;
+  }
+  .mode button.active{
+    background:#2c3c4d;
+    border-color:#6d8eae;
+    color:#fff;
+    font-weight:600;
+  }
+
+  .metrics{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px;
+    margin:8px 0;
+  }
+  .metric{
+    padding:8px 9px;
+    border-radius:2px;
+    background:#14171a;
+    border:1px solid var(--line2);
+  }
+  .metric small{
+    display:block;
+    color:#b7bdc6;
+    font-size:11px;
+  }
+  .metric b{
+    display:block;
+    color:#fff;
+    font-size:17px;
+    margin-top:3px;
+    font-weight:600;
+  }
+
+  .formula{
+    padding:8px 10px;
+    border-left:3px solid #6aa9e8;
+    background:#13171b;
+    border-radius:1px;
+    color:#f1f3f5;
+    line-height:1.55;
+    font-size:12px;
+    margin-top:8px;
+  }
+  .steps{
+    margin:0;
+    padding-left:18px;
+    color:#e7eaf0;
+    font-size:12px;
+    line-height:1.65;
+  }
+  .legend{
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+    font-size:12px;
+    color:#b7bdc6;
+    margin-top:6px;
+  }
+  .dot{
+    display:inline-block;
+    width:9px;
+    height:9px;
+    border-radius:50%;
+    margin-right:5px;
+    vertical-align:middle;
+  }
+  .tip{
+    padding:7px 9px;
+    background:#17191c;
+    border:1px solid #454b53;
+    border-radius:2px;
+    font-size:11px;
+    color:#d5d9df;
+    margin-top:7px;
+  }
+  .row{
+    display:flex;
+    gap:8px;
+    align-items:center;
+  }
+  .row>*{flex:1}
+  .footer{
+    color:#8f97a2;
+    font-size:11px;
+    margin-top:8px;
+    text-align:center;
+  }
+
+  @media(max-width:1050px){
+    .grid{grid-template-columns:1fr}
+    .canvasWrap canvas{width:100%}
+  }
+</style>
+
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="title">
+      <h1>线性回归与逻辑回归｜交互式实时可视化</h1>
+      <p>拖动参数、点击画布添加样本，观察“数据 → 模型 → 损失 → 参数 → 预测”的全过程。</p>
+    </div>
+    <div class="badge">单文件 · 零安装 · 双击即用</div>
+  </div>
+
+  <div class="toolbar">
+    <button class="primary" id="genBtn">🎲 重新生成样本</button>
+    <button id="clearBtn">🗑 清空样本</button>
+    <button id="fitBtn">⚡ 一键拟合</button>
+    <button id="stepBtn">▶ 单步训练</button>
+    <button id="resetBtn">↺ 重置模型</button>
+  </div>
+
+  <div class="grid">
+    <section class="panel">
+      <h2 id="plotTitle">数据与模型</h2>
+      <div class="canvasWrap">
+        <canvas id="plot" width="860" height="540"></canvas>
+              </div>
+      <div class="legend" id="legend">
+        <span><i class="dot" style="background:#2563eb"></i>样本</span>
+        <span><i class="dot" style="background:#ef4444"></i>模型</span>
+      </div>
+      <div class="tip" id="plotTip">教学提示：先调“样本数量/噪声”，再单步训练，观察参数如何逐渐收敛。</div>
+    </section>
+
+    <aside class="panel">
+      <h2>模型控制</h2>
+      <div class="mode">
+        <button id="linearBtn" class="active">线性回归</button>
+        <button id="logisticBtn">逻辑回归</button>
+      </div>
+
+      <h3>数据参数</h3>
+      <div class="two">
+        <div class="control">
+          <label>样本数量 <span class="val" id="nVal">36</span></label>
+          <input id="nRange" type="range" min="6" max="120" value="36">
+        </div>
+        <div class="control">
+          <label>噪声强度 <span class="val" id="noiseVal">1.0</span></label>
+          <input id="noiseRange" type="range" min="0" max="2.5" step="0.1" value="1">
+        </div>
+      </div>
+
+      <div class="two" style="margin-top:8px">
+        <div class="control">
+          <label>随机种子 <span class="val" id="seedVal">2026</span></label>
+          <input id="seedRange" type="range" min="1" max="9999" value="2026">
+        </div>
+        <div class="control">
+          <label>学习率 <span class="val" id="lrVal">0.08</span></label>
+          <input id="lrRange" type="range" min="0.005" max="0.5" step="0.005" value="0.08">
+        </div>
+      </div>
+
+      <h3 style="margin-top:14px">手动参数</h3>
+      <div class="two">
+        <div class="control"><label>权重 w</label><input id="wInput" type="number" step="0.01" value="0"></div>
+        <div class="control"><label>偏置 b</label><input id="bInput" type="number" step="0.01" value="0"></div>
+      </div>
+
+      <div class="metrics" id="metrics"></div>
+
+      <div class="formula" id="formula"></div>
+
+      <h3 style="margin-top:14px">训练过程</h3>
+      <ul class="steps" id="steps"></ul>
+    </aside>
+  </div>
+
+  <div class="panel" style="margin-top:14px">
+    <h2>实时训练曲线</h2>
+    <div class="canvasWrap">
+      <canvas id="lossCanvas" width="1400" height="300"></canvas>
+    </div>
+  </div>
+
+  <div class="footer">交互：单击空白处添加样本；拖动已有样本移动；双击样本删除。适合课堂演示与机器学习入门。</div>
+</div>
+
+<script>
+(() => {
+  const plot = document.getElementById('plot');
+  const ctx = plot.getContext('2d');
+  const lossCanvas = document.getElementById('lossCanvas');
+  const lctx = lossCanvas.getContext('2d');
+
+  let mode = 'linear';
+  let samples = [];
+  let w = 0, b = 0;
+  let history = [];
+  let dragging = -1;
+  let lastClick = 0;
+  const W = plot.width, H = plot.height;
+  const pad = {l:60,r:24,t:28,b:52};
+
+  const $ = id => document.getElementById(id);
+  const nRange=$('nRange'), noiseRange=$('noiseRange'), seedRange=$('seedRange'), lrRange=$('lrRange');
+
+  function rng(seed){
+    let x = seed >>> 0;
+    return () => {
+      x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+      return ((x >>> 0) / 4294967296);
+    }
+  }
+  function gauss(rand){
+    let u=0,v=0; while(u===0)u=rand(); while(v===0)v=rand();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+  }
+  function sigmoid(z){ return 1/(1+Math.exp(-Math.max(-60,Math.min(60,z)))); }
+
+  function generate(){
+    const rand=rng(+seedRange.value);
+    const n=+nRange.value, noise=+noiseRange.value;
+    samples=[];
+    if(mode==='linear'){
+      for(let i=0;i<n;i++){
+        const x=-4 + rand()*8;
+        const y=1.05*x+0.65 + gauss(rand)*noise;
+        samples.push({x,y});
+      }
+    }else{
+      for(let i=0;i<n;i++){
+        const x=-4 + rand()*8;
+        const p=sigmoid(-0.95*x+0.25);
+        const y=rand()<p?1:0;
+        samples.push({x,y});
+      }
+    }
+    resetModel();
+  }
+
+  function resetModel(){
+    if(mode==='linear'){ w=0; b=0; } else { w=0; b=0; }
+    history=[];
+    syncInputs();
+    draw();
+  }
+  function syncInputs(){
+    $('wInput').value=w.toFixed(4);
+    $('bInput').value=b.toFixed(4);
+  }
+  function updateLabels(){
+    $('nVal').textContent=nRange.value;
+    $('noiseVal').textContent=(+noiseRange.value).toFixed(1);
+    $('seedVal').textContent=seedRange.value;
+    $('lrVal').textContent=(+lrRange.value).toFixed(3);
+    $('plotTitle').textContent=mode==='linear'?'线性回归：拟合一条直线':'逻辑回归：拟合概率与分类边界';
+    $('linearBtn').classList.toggle('active',mode==='linear');
+    $('logisticBtn').classList.toggle('active',mode==='logistic');
+    $('legend').innerHTML = mode==='linear'
+      ? '<span><i class="dot" style="background:#fff;box-shadow:0 0 10px #7ff6ff"></i>样本点</span><span><i class="dot" style="background:#ff4d67;box-shadow:0 0 10px #ff2f5b"></i>回归直线</span><span><i class="dot" style="background:#d56cff;box-shadow:0 0 10px #d56cff"></i>残差</span>'
+      : '<span><i class="dot" style="background:#fff;box-shadow:0 0 10px #65dfff"></i>类别 0</span><span><i class="dot" style="background:#fff;box-shadow:0 0 10px #ff4d67"></i>类别 1</span><span><i class="dot" style="background:#4dff91;box-shadow:0 0 10px #22ff88"></i>sigmoid 概率曲线</span>';
+    $('plotTip').textContent=mode==='linear'
+      ? '教学提示：拖动一个点，观察“残差”和 MSE 如何变化；再单步训练，查看 w、b 向最优值移动。'
+      : '教学提示：移动样本观察分类边界；再单步训练，查看交叉熵损失下降以及 sigmoid 输出概率变化。';
+  }
+
+  function xPix(x){ return pad.l + (x+5)/10*(W-pad.l-pad.r); }
+  function yPix(y){ return H-pad.b - (y-(-5))/10*(H-pad.t-pad.b); }
+  function xVal(px){ return (px-pad.l)/(W-pad.l-pad.r)*10 - 5; }
+  function yVal(py){ return -5 + (H-pad.b-py)/(H-pad.t-pad.b)*10; }
+
+  function drawAxes(){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#1b232d'; ctx.lineWidth=1;
+    for(let v=-5;v<=5;v++){
+      const xp=xPix(v), yp=yPix(v);
+      ctx.beginPath();ctx.moveTo(xp,pad.t);ctx.lineTo(xp,H-pad.b);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(pad.l,yp);ctx.lineTo(W-pad.r,yp);ctx.stroke();
+    }
+    ctx.strokeStyle='#66717f';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,H-pad.b);ctx.lineTo(W-pad.r,H-pad.b);ctx.stroke();
+    ctx.fillStyle='#9aa6b4';ctx.font='12px Segoe UI, Microsoft YaHei';
+    for(let v=-5;v<=5;v++){
+      ctx.fillText(v.toString(),xPix(v)-4,H-pad.b+19);
+      if(v!==-5) ctx.fillText(v.toString(),pad.l-24,yPix(v)+4);
+    }
+    ctx.fillText('x',W-18,H-pad.b+22);
+    ctx.fillText('y',pad.l-22,pad.t+2);
+  }
+
+  function drawLinear(){
+    // line
+    ctx.save();
+    ctx.strokeStyle='#ff4d67';ctx.lineWidth=3;ctx.shadowColor='#ff2f5b';ctx.shadowBlur=16;
+    ctx.beginPath();
+    [-5,5].forEach((x,i)=>{const y=w*x+b; const px=xPix(x),py=yPix(y); i?ctx.lineTo(px,py):ctx.moveTo(px,py)});
+    ctx.stroke();
+    ctx.restore();
+    samples.forEach(s=>{
+      const px=xPix(s.x),py=yPix(s.y), yhat=w*s.x+b;
+      ctx.strokeStyle='rgba(170,90,255,.45)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,yPix(yhat));ctx.stroke();
+      ctx.fillStyle='#ffffff';ctx.shadowColor='#7ff6ff';ctx.shadowBlur=18;ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    });
+  }
+
+  function drawLogistic(){
+    ctx.save(); ctx.strokeStyle='#4dff91';ctx.lineWidth=3;ctx.shadowColor='#22ff88';ctx.shadowBlur=16;
+    ctx.beginPath();
+    for(let i=0;i<=220;i++){
+      const x=-5+i/220*10, p=sigmoid(w*x+b);
+      const px=xPix(x),py=yPix(-5+10*p);
+      i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+    } ctx.stroke(); ctx.restore();
+
+    if(Math.abs(w)>1e-7){
+      const xb=-b/w;
+      if(xb>=-5&&xb<=5){
+        ctx.strokeStyle='#e38cff';ctx.shadowColor='#d56cff';ctx.shadowBlur=14;ctx.setLineDash([7,5]);ctx.lineWidth=2;
+        ctx.beginPath();ctx.moveTo(xPix(xb),pad.t);ctx.lineTo(xPix(xb),H-pad.b);ctx.stroke();ctx.shadowBlur=0;ctx.setLineDash([]);
+        ctx.fillStyle='#f0b3ff';ctx.font='12px Segoe UI, Microsoft YaHei';
+        ctx.fillText('决策边界 x = '+xb.toFixed(2),xPix(xb)+7,pad.t+18);
+      }
+    }
+    samples.forEach(s=>{
+      const px=xPix(s.x),py=yPix(-5+10*s.y);
+      ctx.fillStyle='#ffffff';ctx.shadowColor=s.y===1?'#ff4d67':'#65dfff';ctx.shadowBlur=18;
+      ctx.beginPath();ctx.arc(px,py,6,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+      ctx.strokeStyle='#d9f7ff';ctx.lineWidth=1.5;ctx.stroke();
+    });
+  }
+
+  function calcLoss(){
+    if(!samples.length) return 0;
+    if(mode==='linear'){
+      return samples.reduce((a,s)=>a+Math.pow(w*s.x+b-s.y,2),0)/samples.length;
+    }else{
+      let z=0;
+      for(const s of samples){
+        const p=Math.min(1-1e-12,Math.max(1e-12,sigmoid(w*s.x+b)));
+        z += -s.y*Math.log(p) - (1-s.y)*Math.log(1-p);
+      }
+      return z/samples.length;
+    }
+  }
+
+  function trainStep(){
+    if(!samples.length) return;
+    const lr=+lrRange.value;
+    if(mode==='linear'){
+      let dw=0,db=0;
+      for(const s of samples){
+        const e=(w*s.x+b)-s.y;
+        dw+=e*s.x; db+=e;
+      }
+      dw*=2/samples.length; db*=2/samples.length;
+      w-=lr*dw; b-=lr*db;
+    }else{
+      let dw=0,db=0;
+      for(const s of samples){
+        const p=sigmoid(w*s.x+b), e=p-s.y;
+        dw+=e*s.x; db+=e;
+      }
+      dw/=samples.length; db/=samples.length;
+      w-=lr*dw; b-=lr*db;
+    }
+    history.push(calcLoss());
+    if(history.length>250) history.shift();
+    syncInputs(); draw();
+  }
+
+  let timer=null;
+  function fit(){
+    if(timer) return;
+    let count=0;
+    timer=setInterval(()=>{
+      trainStep(); count++;
+      if(count>=180){ clearInterval(timer); timer=null; }
+    },20);
+  }
+
+  function drawLoss(){
+    const cw=lossCanvas.width,ch=lossCanvas.height;
+    lctx.clearRect(0,0,cw,ch); lctx.fillStyle='#000';lctx.fillRect(0,0,cw,ch);
+    if(history.length<2){
+      lctx.fillStyle='#8f9bab';lctx.font='14px Segoe UI, Microsoft YaHei';
+      lctx.fillText('点击“单步训练”或“ 一键拟合 ”后显示损失曲线',30,42); return;
+    }
+    const min=Math.min(...history), max=Math.max(...history), span=(max-min)||1;
+    lctx.strokeStyle='#1b232d';lctx.lineWidth=1;
+    for(let i=0;i<6;i++){
+      const y=25+i*(ch-55)/5;lctx.beginPath();lctx.moveTo(55,y);lctx.lineTo(cw-18,y);lctx.stroke();
+    }
+    lctx.save(); lctx.strokeStyle='#63e6ff';lctx.lineWidth=2.5;lctx.shadowColor='#39d8ff';lctx.shadowBlur=14;lctx.beginPath();
+    history.forEach((v,i)=>{
+      const x=55+i/(history.length-1)*(cw-75), y=25+(max-v)/span*(ch-55);
+      i?lctx.lineTo(x,y):lctx.moveTo(x,y);
+    });lctx.stroke(); lctx.restore();
+    lctx.fillStyle='#9aa6b4';lctx.font='12px Segoe UI, Microsoft YaHei';
+    lctx.fillText('Loss',10,32);
+    lctx.fillText('step',cw-42,ch-9);
+    lctx.fillText(max.toFixed(3),8,30);
+    lctx.fillText(min.toFixed(3),8,ch-25);
+  }
+
+  function draw(){
+    updateLabels(); drawAxes();
+    if(mode==='linear') drawLinear(); else drawLogistic();
+    const loss=calcLoss();
+    const metrics = mode==='linear'
+      ? [
+        ['样本数',samples.length],
+        ['w',w.toFixed(4)],
+        ['b',b.toFixed(4)],
+        ['MSE',loss.toFixed(5)]
+      ]
+      : [
+        ['样本数',samples.length],
+        ['w',w.toFixed(4)],
+        ['b',b.toFixed(4)],
+        ['交叉熵',loss.toFixed(5)]
+      ];
+    $('metrics').innerHTML=metrics.map(m=>`<div class="metric"><small>${m[0]}</small><b>${m[1]}</b></div>`).join('');
+    $('formula').innerHTML = mode==='linear'
+      ? `<b>模型：</b>ŷ = wx + b<br><b>损失：</b>MSE = 1/n · Σ(ŷ − y)²<br><b>更新：</b>w ← w − η∂L/∂w，b ← b − η∂L/∂b`
+      : `<b>模型：</b>p(y=1|x)=σ(wx+b)，σ(z)=1/(1+e<sup>−z</sup>)<br><b>损失：</b>Cross-Entropy = −1/n · Σ[ylog p+(1−y)log(1−p)]<br><b>分类：</b>p≥0.5 视为 1，否则为 0`;
+    $('steps').innerHTML = mode==='linear'
+      ? `<li>初始化 w、b</li><li>计算预测值 ŷ</li><li>计算残差与 MSE</li><li>根据梯度更新 w、b</li><li>重复迭代直到损失收敛</li>`
+      : `<li>初始化 w、b</li><li>计算 z=wx+b 与 sigmoid 概率</li><li>计算交叉熵损失</li><li>根据梯度更新 w、b</li><li>0.5 作为常用分类阈值</li>`;
+    drawLoss();
+  }
+
+  // controls
+  $('linearBtn').onclick=()=>{mode='linear';generate();};
+  $('logisticBtn').onclick=()=>{mode='logistic';generate();};
+  $('genBtn').onclick=generate;
+  $('clearBtn').onclick=()=>{samples=[];history=[];draw();};
+  $('fitBtn').onclick=fit;
+  $('stepBtn').onclick=trainStep;
+  $('resetBtn').onclick=resetModel;
+  [nRange,noiseRange,seedRange].forEach(el=>el.addEventListener('input',()=>{updateLabels();generate();}));
+  lrRange.addEventListener('input',draw);
+  $('wInput').addEventListener('change',e=>{w=+e.target.value||0;history=[];draw();});
+  $('bInput').addEventListener('change',e=>{b=+e.target.value||0;history=[];draw();});
+
+  plot.addEventListener('mousedown',e=>{
+    const r=plot.getBoundingClientRect(), px=(e.clientX-r.left)*plot.width/r.width, py=(e.clientY-r.top)*plot.height/r.height;
+    let best=-1,bd=16;
+    samples.forEach((s,i)=>{
+      const sx=xPix(s.x), sy=mode==='linear'?yPix(s.y):yPix(-5+10*s.y);
+      const d=Math.hypot(px-sx,py-sy);
+      if(d<bd){bd=d;best=i;}
+    });
+    if(best>=0){dragging=best;}
+    else{
+      const now=Date.now();
+      if(now-lastClick<280){lastClick=0;return;}
+      lastClick=now;
+      const x=xVal(px);
+      if(mode==='linear'){
+        const y=yVal(py);
+        samples.push({x,y});
+      }else{
+        const y=py<(pad.t+H-pad.b)/2?1:0;
+        samples.push({x,y});
+      }
+      history=[];draw();
+    }
+  });
+  plot.addEventListener('mousemove',e=>{
+    if(dragging<0)return;
+    const r=plot.getBoundingClientRect(), px=(e.clientX-r.left)*plot.width/r.width, py=(e.clientY-r.top)*plot.height/r.height;
+    const s=samples[dragging]; s.x=Math.max(-5,Math.min(5,xVal(px)));
+    if(mode==='linear') s.y=Math.max(-5,Math.min(5,yVal(py)));
+    else s.y=py<(pad.t+H-pad.b)/2?1:0;
+    history=[];draw();
+  });
+  window.addEventListener('mouseup',()=>dragging=-1);
+  plot.addEventListener('dblclick',e=>{
+    const r=plot.getBoundingClientRect(), px=(e.clientX-r.left)*plot.width/r.width, py=(e.clientY-r.top)*plot.height/r.height;
+    let best=-1,bd=18;
+    samples.forEach((s,i)=>{
+      const sx=xPix(s.x), sy=mode==='linear'?yPix(s.y):yPix(-5+10*s.y);
+      const d=Math.hypot(px-sx,py-sy); if(d<bd){bd=d;best=i;}
+    });
+    if(best>=0){samples.splice(best,1);history=[];draw();}
+  });
+
+  generate();
+})();
+</script>
+</body>
+</html>
